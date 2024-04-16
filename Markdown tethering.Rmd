@@ -1,0 +1,1529 @@
+---
+title: "HOKN Data, Menti et al. 2024"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Requirements
+
+The code was written and tested with the following Rstudio version:
+
+*RStudio 2023.12.1+402 "Ocean Storm" Release (4da58325ffcff29d157d9264087d4b1ab27f7204, 2024-01-28) for windows Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) RStudio/2023.12.1+402 Chrome/116.0.5845.190 Electron/26.2.4 Safari/537.36.*
+
+Before starting the markdown document please read ahead and install the required R packages. I would advice installing the missing packages by yourself if you already have a working R installation. Otherwise, it is also possible to un-comment lines 3-6 in the next chunk of code to automatically install all the required packages and their requirements.
+
+The following libraries will be loaded:
+
+-   car;
+
+-   datarium;
+
+-   dplyr;
+
+-   dunn.test;
+
+-   ggExtra;
+
+-   ggplot2;
+
+-   ggpubr;
+
+-   lattice;
+
+-   MASS;
+
+-   multcomp;
+
+-   perm;
+
+-   PMCMRplus;
+
+-   scales;
+
+-   reshape2;
+
+-   rstatix;
+
+-   rstudioapi;
+
+-   stats;
+
+-   tidyverse;
+
+-   trajr.
+
+***! Important***: please also download and open the provided R.data files in your environment, as they contain the pre-generated, and required, data sets.
+
+```{r Packages and libraries, message=TRUE, warning=TRUE, include=FALSE}
+# Install packages
+#install.packages("car", "datarium", "dplyr","dunn.test", "ggExtra","ggplot2",
+#                "ggpubr", "lattice", "multcomp", "PMCMRplus", "scales", "reshape2",
+#                "rstatix", "rstudioapi", "stats", "svDialogs", "tidyverse",
+#                "trajr", dependencies = TRUE);
+# Load libraries
+library(car);
+library(datarium);
+library(dplyr);
+library(dunn.test)
+library(ggExtra);
+library(ggplot2);
+library(ggpubr);
+library(lattice);
+library(MASS);
+library(multcomp);
+library(perm);
+library(PMCMRplus);
+library(scales);
+library(reshape2);
+library(rstatix);
+library(rstudioapi);
+library(stats);
+library(svDialogs);
+library(tidyverse);
+library(trajr);
+library(viridisLite);
+```
+
+## Introduction
+
+In this markdown we are analyzing the HOKN events, extracted from data obtained during tethered flight experiments, by mean of velocity of the slow phase of the HOKN, the number of peaks, and the time passing from consecutive peaks or inter-saccadic-intervals (ISI). The intervals are intended as the time passing from one HOKN event to the subsequent one; there's no value for the intervals at T0, because we can't subtract the time of the very first HOKN from 0, when the experiment starts.
+
+## Analysis from the provided data sets.
+
+**!** **Remember to load the provided R.data files in your environment**.
+
+Notes on loaded data sets:
+
+1.  'group_full' is the same from the original 'group' except the first line of NaN values is ditched from both the NOSTIM and STIM rows;
+
+2.  'group_combined' is a merged DF of all events without phase distinction; this is done only for Controls since after testing no meaningful difference was found between the distributions of interevent time; the '\_new' DF include the group label;
+
+3.  'group_stim/nostim' are DFs splitted from (1). The '\_new' DFs subtitue the 'stim' column now redundant with group label;
+
+4.  the main dataframe recalled, rearranged, or modified along the code chunks is named FDS_ALL.
+
+```{r Groups and palette, message=FALSE, warning=FALSE, include=FALSE}
+group <- c("controls", "eugenol", "eugenol05", "lemongrass", "lemongrass05", "picaridin", "picaridin05", "ir3535", "ir353505")
+group_colors <- c("controls" = "forestgreen", "eugenol05" = "skyblue1",
+                  "eugenol" = "royalblue", "lemongrass05" = "lightgoldenrod1",
+                  "lemongrass" = "goldenrod1", "picaridin05" = "lightsalmon1",
+                  "picaridin" = "orangered1", "ir353505" = "mediumorchid1",
+                  "ir3535" = "darkviolet")
+
+load("Mentietall_Dataframes.Rdata")
+velocity_all_controls <- as.data.frame(dataframelist[1])
+velocity_all_eugenol <- as.data.frame(dataframelist[2])
+velocity_all_eugenol05 <- as.data.frame(dataframelist[3])
+velocity_all_lemongrass <- as.data.frame(dataframelist[4])
+velocity_all_lemongrass05 <- as.data.frame(dataframelist[5])
+velocity_all_picaridin <- as.data.frame(dataframelist[6])
+velocity_all_picaridin05 <- as.data.frame(dataframelist[7])
+velocity_all_ir3535 <- as.data.frame(dataframelist[8])
+velocity_all_ir353505 <- as.data.frame(dataframelist[9])
+Peak_DF <- as.data.frame(dataframelist[10])
+FDS_ALL <- as.data.frame(dataframelist[11])
+count_df <- as.data.frame(dataframelist[12])
+count_df3 <- as.data.frame(dataframelist[13])
+```
+
+### Slow phase velocity
+
+#### Plots
+
+Discrete plots for the slow phase velocity of the HOKN in each group.
+
+```{r Boxplots mediated per fly number, echo=FALSE, fig.height=5, fig.width=5, message=FALSE, warning=FALSE, paged.print=TRUE}
+# Remember to load into the workspace the required datasets
+ALL_SLOWSPVEL <- rbind(velocity_all_controls, velocity_all_eugenol, velocity_all_eugenol05, velocity_all_lemongrass, velocity_all_lemongrass05, velocity_all_picaridin, velocity_all_picaridin05, velocity_all_ir3535, velocity_all_ir353505)
+
+group <- c("controls", "eugenol", "eugenol05", "lemongrass", "lemongrass05", "picaridin", "picaridin05", "ir3535", "ir353505")
+
+for (z in group) {
+  DF_1 <- ALL_SLOWSPVEL[ALL_SLOWSPVEL$group %in% z &
+                          ALL_SLOWSPVEL$phase %in% "nostim", ]
+  DF_2 <- ALL_SLOWSPVEL[ALL_SLOWSPVEL$group %in% z &
+                          ALL_SLOWSPVEL$phase %in% "stim", ]
+
+f<-range(as.integer(DF_1$generation))
+f<-c(1:max(f))
+
+g<-range(DF_2$generation)
+g<-c(1:max(g))
+
+n_mean <- c()
+for (i in f) {
+m_mean <- mean(DF_1[DF_1$generation %in% i, ]$spvel)
+n_mean <- append(n_mean, m_mean)
+}
+
+s_mean <- c()
+for (j in g) {
+t_mean <- mean(DF_2[DF_2$generation %in% j, ]$spvel)  
+s_mean <- append(s_mean, t_mean)
+}
+
+n_mean <- as.data.frame(n_mean)
+s_mean <- as.data.frame(s_mean)
+
+p <- ggplot()+
+  stat_boxplot(geom = 'errorbar')+
+  geom_boxplot(data=n_mean, aes(x='MOP', y=n_mean), fill="darkgrey", outlier.color = NA, outlier.size = 0, outlier.shape = NA)+
+  geom_jitter(data=n_mean, aes(x='MOP', y=n_mean),size=1, col='black')+
+  #
+  geom_boxplot(data=s_mean, aes(x='RP' ,y=s_mean), fill="lightgrey", outlier.color = NA, outlier.size = 0, outlier.shape = NA)+
+  geom_jitter(data=s_mean, aes(x='RP' ,y=s_mean), size=1, col='black')+
+  #scale_x_continuous(NULL, n.breaks = 6)+
+  ylim(10, 100)+
+  geom_hline(yintercept = 60, linetype = 'dashed', col = 'black')+
+  ylab('Velocity (deg*s-1)')+
+  xlab('')+
+  labs(title= z ,
+       subtitle="Average slow phase velocity")+
+  theme(axis.line = element_line(colour = 'black', linetype = 'solid'),
+        panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red', linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'));
+print(p)
+}
+```
+
+#### Statistics
+
+Performs a normality check on data divided between MOP and RP plus a check for heteroscedasticity, then runs the statistical test (parametric as for our data) eventually corrected for heteroscedasticity.
+
+```{r Shapiro & Bartlett + Wilcoxon, echo=FALSE}
+
+#ALL_SLOWSPVEL <- rbind(velocity_all_controls, velocity_all_eugenol, #velocity_all_eugenol05, velocity_all_lemongrass, #velocity_all_lemongrass05, velocity_all_picaridin, #velocity_all_picaridin05, velocity_all_ir3535, velocity_all_ir353505)
+
+group <- c("controls", "eugenol", "eugenol05", "lemongrass", "lemongrass05", "picaridin", "picaridin05", "ir3535", "ir353505")
+
+for (j in group) {
+  
+  print(j)
+  shap.ns <- shapiro.test(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$group == j &
+                                                ALL_SLOWSPVEL$phase ==
+                                                'nostim'])
+  #qqplot(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$group == j
+  #                        & ALL_SLOWSPVEL$phase == 'nostim'],
+  #    ALL_SLOWSPVEL$sec[ALL_SLOWSPVEL$group == j
+  #                        & ALL_SLOWSPVEL$phase == 'nostim'])
+  shap.s <- shapiro.test(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$group == j
+                                 & ALL_SLOWSPVEL$phase == 'stim'])
+
+  bar <- bartlett.test(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$group == j] ~
+                ALL_SLOWSPVEL$phase[ALL_SLOWSPVEL$group == j],
+              data = ALL_SLOWSPVEL)
+  
+  means_nostim <- c()
+  sd_nostim <- c()
+  means_stim <- c()
+  sd_stim <- c()
+  
+  for (i in 1:max(ALL_SLOWSPVEL$generation[ALL_SLOWSPVEL$group == j
+                                         & ALL_SLOWSPVEL$phase == 'nostim'])){
+    means_nostim <- c(means_nostim,
+                    mean(na.omit(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$generation == i
+                                                     & ALL_SLOWSPVEL$group == j
+                                                     & ALL_SLOWSPVEL$phase ==
+                                                       'nostim'])))
+    sd_nostim <- c(sd_nostim, sd(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$generation
+                                                     == i
+                                                     & ALL_SLOWSPVEL$group == j
+                                                     & ALL_SLOWSPVEL$phase ==
+                                                       'nostim']))
+    }
+  for (k in 1:max(ALL_SLOWSPVEL$generation[ALL_SLOWSPVEL$group == j
+                                           & ALL_SLOWSPVEL$phase == 'stim'])){
+    means_stim <- c(means_stim,
+                    mean(na.omit(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$generation
+                                                     == k
+                                                     & ALL_SLOWSPVEL$group == j
+                                                     & ALL_SLOWSPVEL$phase ==
+                                                       'stim'])))
+    sd_stim <- c(sd_stim,
+                 sd(na.omit(ALL_SLOWSPVEL$spvel[ALL_SLOWSPVEL$generation == k
+                                                & ALL_SLOWSPVEL$group == j
+                                                & ALL_SLOWSPVEL$phase ==
+                                                  'stim'])))
+    }
+  means_nostim
+  sd_nostim 
+  means_stim
+  sd_stim
+
+# Correct = TRUE only if bartlett's test is significant
+  if (bar$p.value < 0.05) {
+    k <- TRUE
+    } else {
+    k <- FALSE
+    }
+  
+ w <- wilcox.test(means_nostim, means_stim, paired = TRUE, correct = k)
+ 
+ print(shap.ns)
+ print(shap.s)
+ print(bar)
+ print(w)
+}
+```
+
+### Peaks
+
+#### Plots
+
+This section of code will generate two plots:
+
+1.  Average number of peaks per fly in each group, divided among MOP (dark grey) and RP (light grey);
+
+2.  Percentage of RP peaks with respect to the corresponding MOP (taken as reference) in each group.
+
+```{r Barplots, echo=FALSE, fig.height=5, fig.width=10, message=FALSE, warning=FALSE}
+
+phase <- c('No odour','Stimulation')
+# Color vector for d.peaks and color table
+color <- c('darkgrey','lightgrey')
+names(color) <- c('No odour', 'Stimulation')
+color_table <- as.data.frame(t(color))
+
+## Proportions Z-test from the peaks
+# From d.peaks extract a vector with the total number of peaks, and another with
+# the peaks within the stim phases.
+mop_peaks <- c()
+op_peaks <- c()
+mean_mop_peaks <- c()
+sd_mop_peaks <- c()
+mean_op_peaks <- c()
+sd_op_peaks <- c()
+total.peaks <- c()
+stim.peaks <- c()
+
+for (m in group) {
+  max_count <- max(FDS_ALL$FlyId[FDS_ALL$group %in% m], na.rm = TRUE)
+  for (l in 1:max_count) {
+    mop_peaks <- c(mop_peaks, nrow(FDS_ALL[FDS_ALL$group %in% m &
+                                             FDS_ALL$stim == 0 & FDS_ALL$FlyId %in% l, ]))
+    op_peaks <- c(op_peaks, nrow(FDS_ALL[FDS_ALL$group %in% m &
+                                           FDS_ALL$stim == 1 & FDS_ALL$FlyId %in% l, ]))
+  }
+  stim.peaks <- c(stim.peaks, sum(op_peaks))
+  total.peaks <- c(total.peaks, sum(mop_peaks, op_peaks))
+  
+  mean_mop_peaks <- c(mean_mop_peaks, mean(mop_peaks, na.rm = TRUE))
+  sd_mop_peaks <- c(sd_mop_peaks, sd(mop_peaks, na.rm = TRUE))
+  mean_op_peaks <- c(mean_op_peaks, mean(op_peaks, na.rm = TRUE))
+  sd_op_peaks <- c(sd_op_peaks, sd(op_peaks, na.rm = TRUE))
+  mop_peaks <- c()
+  op_peaks <- c()
+}
+peaks <- c()
+peaks_sd <- c()
+peak_proportions <- c()
+sd_proportions <- c()
+for (j in 1:9) {
+  peaks <- c(peaks, mean_mop_peaks[j], mean_op_peaks[j])
+  peaks_sd <- c(peaks_sd, sd_mop_peaks[j], sd_op_peaks[j])
+  peak_proportions <- c(peak_proportions,100,mean_op_peaks[j]*100/mean_mop_peaks[j])
+  sd_proportions <- c(sd_proportions, sd_mop_peaks[j]*100/mean_mop_peaks[j],
+                      sd_op_peaks[j]*100/mean_op_peaks[j])
+}
+
+## Peaks plot
+lab <- c('MOP', 'OP')
+phase <- rep(lab, times = 9)
+id2 <- rep(group, each = 2)
+d.peaks <- data.frame(id2, phase, peaks, peaks_sd)
+d.peaks2 <- data.frame(id2, phase, peak_proportions, sd_proportions)
+# Histograms of peaks
+g <- ggplot(d.peaks, aes(x = id2, y = peaks,
+                          fill = factor(phase))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = peaks - peaks_sd,
+                    ymax = peaks + peaks_sd), 
+                position = position_dodge(1.0), width = 0.25) +
+  scale_x_discrete(limits=id2)+
+  scale_fill_manual(values = c("darkgrey", "lightgrey")) +
+  #ylim(0, 110)+
+  labs(fill='Olfatory stimulation')+
+  labs(title='Peaks number per fly')+
+  xlab('Group')+
+  ylab('Peaks %')+
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red', linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+#
+h <- ggplot(d.peaks2, aes(x = id2, y = peak_proportions,
+                          fill = factor(phase))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  #geom_errorbar(aes(ymin = peak_proportions - sd_proportions,
+  #                 ymax = peak_proportions + sd_proportions), 
+  #             position = position_dodge(1.0), width = 0.25) +
+  scale_x_discrete(limits=id2)+
+  scale_fill_manual(values = c("darkgrey", "lightgrey")) +
+  ylim(0, 105)+
+  labs(fill='Olfatory stimulation')+
+  labs(title='Peaks between conditions (Normalised)')+
+  xlab('Group')+
+  ylab('Peaks %')+
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red', linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+
+print(g)
+print(h)
+```
+
+#### Statistics
+
+The code will run automatically a test for equality of proportions between each group. This will generate some redundant output due to how the code is written. ***Please*** ***note*** that the interesting comparisons are the ones including the "Control" group against the others (first part of the automated output), and the comparison of the two different concentrations inside each group. Alternatively, the code can be easily changed running manually just the 2nd loop and modifying '[y]' and '[j]' to the desired values 1:9, which are related to the group vector as defined in the "Groups" chunk above.
+
+```{r Peaks statistics, echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+
+# Count peaks
+y = 1
+
+for (m in group) {
+  counter <- c(1:9)
+  counter <- counter[counter != y]
+  
+  for (j in counter) {
+  print(m)
+  print('vs')
+  print(group[j])
+  z.test_j <- prop.test(x = c(stim.peaks[y], stim.peaks[j]),
+                               n = c(total.peaks[y], total.peaks[j]), alternative ='two.sided')
+  print(z.test_j)
+  }
+  y = y+1
+ }
+
+
+```
+
+### Inter saccadic interval (ISI)
+
+#### Plots
+
+Distributions of the ISI duration (seconds):
+
+-   light or dark colours -\> 0.5% or 1.0% concentration;
+
+-   dashed vs solid lines -\> MOP vs RP;
+
+-   solid black line -\> Controls;
+
+Controls are shown as reference as a single line since not significantly different.
+
+```{r Density plot (ISI), echo=FALSE, message=FALSE, warning=FALSE}
+
+a <- ggplot()+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'eugenol05'& FDS_ALL$stim == 0, ],
+               aes(x=interevent), linewidth = 1.2,
+               linetype = 'dashed', col='skyblue1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'eugenol05'& FDS_ALL$stim == 1, ],
+               aes(x=interevent), linewidth = 1.2,
+               col='skyblue1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'eugenol'& FDS_ALL$stim == 0, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               linetype = 'dashed', col='royalblue', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'eugenol'& FDS_ALL$stim == 1, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               col='royalblue', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'controls', ],
+               aes(x=interevent),
+               linewidth = 1.0,
+               col='black', alpha=0.5)+
+  xlim(0,2)+
+  ylim(0,2)+
+  labs(title=('Eugenol'), subtitle=('ISI distribution'))+
+  xlab('Time (sec)')+
+  ylab('Density')+
+  theme_classic()+
+  removeGrid()
+
+b <- ggplot()+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'lemongrass05'& FDS_ALL$stim == 0, ],
+               aes(x=interevent), linewidth = 1.2,
+               linetype = 'dashed', col='lightgoldenrod1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'lemongrass05'& FDS_ALL$stim == 1, ],
+               aes(x=interevent), linewidth = 1.2,
+               col='lightgoldenrod1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'lemongrass'& FDS_ALL$stim == 0, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               linetype = 'dashed', col='goldenrod1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'lemongrass'& FDS_ALL$stim == 1, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               col='goldenrod1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'controls', ],
+               aes(x=interevent),
+               linewidth = 1.0,
+               col='black', alpha=0.5)+
+  xlim(0,2)+
+  ylim(0,2)+
+  labs(title=('Lemongrass'), subtitle=('ISI distribution'))+
+  xlab('Time (sec)')+
+  ylab('Density')+
+  theme_classic()+
+  removeGrid()
+
+c <- ggplot()+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'picaridin05'& FDS_ALL$stim == 0, ],
+               aes(x=interevent), linewidth = 1.2,
+               linetype = 'dashed', col='lightsalmon1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'picaridin05'& FDS_ALL$stim == 1, ],
+               aes(x=interevent), linewidth = 1.2,
+               col='lightsalmon1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'picaridin'& FDS_ALL$stim == 0, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               linetype = 'dashed', col='orangered1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'picaridin'& FDS_ALL$stim == 1, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               col='orangered1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'controls', ],
+               aes(x=interevent),
+               linewidth = 1.0,
+               col='black', alpha=0.5)+
+  xlim(0,2)+
+  ylim(0,2)+
+  labs(title=('Picaridin'), subtitle=('ISI distribution'))+
+  xlab('Time (sec)')+
+  ylab('Density')+
+  theme_classic()+
+  removeGrid()
+
+d <- ggplot()+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'ir353505'& FDS_ALL$stim == 0, ],
+               aes(x=interevent), linewidth = 1.2,
+               linetype = 'dashed', col='mediumorchid1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'ir353505'& FDS_ALL$stim == 1, ],
+               aes(x=interevent), linewidth = 1.2,
+               col='mediumorchid1', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'ir3535'& FDS_ALL$stim == 0, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               linetype = 'dashed', col='darkviolet', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'ir3535'& FDS_ALL$stim == 1, ],
+               aes(x=interevent),
+               linewidth = 1.2,
+               col='darkviolet', alpha=0.5)+
+  geom_density(data=FDS_ALL[FDS_ALL$group %in% 'controls', ],
+               aes(x=interevent),
+               linewidth = 1.0,
+               col='black', alpha=0.5)+
+  xlim(0,2)+
+  ylim(0,2)+
+  labs(title=('IR3535'), subtitle=('ISI distribution'))+
+  xlab('Time (sec)')+
+  ylab('Density')+
+  theme_classic()+
+  removeGrid()
+
+print(a)
+print(b)
+print(c)
+print(d)
+```
+
+#### Statistics
+
+Normality and heteroscedasticity checks. 2--way ANOVA and Games - Howell post-hoc test.
+
+```{r Shapiro, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# Check Normality in MOP and RP (all groups)
+for (m in group) {
+  Shapiro_nostim<-shapiro.test(FDS_ALL[FDS_ALL$group %in% m & FDS_ALL$stim == 0, ]$interevent)
+Shapiro_stim<-shapiro.test(FDS_ALL[FDS_ALL$group %in% m & FDS_ALL$stim == 1, ]$interevent)
+print(m)
+print(Shapiro_nostim)
+print(Shapiro_stim)
+}
+
+a <- ggqqplot(FDS_ALL[FDS_ALL$stim == 0, ], "interevent", facet.by = "group",
+              title = "QQ-plot MOP all")
+b <- ggqqplot(FDS_ALL[FDS_ALL$stim == 1, ], "interevent", facet.by = "group",
+              title = "QQ-plot RP all")
+print(a)
+print(b)
+# Levene test
+TN <- FDS_ALL %>% levene_test(interevent ~ group)
+print("Leven Test")
+print(TN)
+# ANOVA
+w2aov <- oneway.test(FDS_ALL$interevent ~
+                           FDS_ALL$group +
+                           FDS_ALL$stim)
+print(w2aov)
+# Games Howell
+GH <- gamesHowellTest(FDS_ALL$interevent,
+                      interaction(FDS_ALL$group, FDS_ALL$stim))
+print(GH)
+
+```
+
+### ISI and Peaks across trials
+
+#### Plots
+
+Box-plots of ISI varying in time (along trials).
+
+The chunks of code plot the following:
+
+1.  For each group: dot-plots for the average ISI per single flies (mean and median), plus the average ISI (mean) per single flies *per trial.*
+2.  For each group: ISI box-plots along trials for each fly.
+3.  For each group: dot-plots and raster plots with the density of peaks over trials.
+
+**Reminder**: MOP is shown in dark grey, while RP is labelled by light grey.
+
+```{r Dotplot, echo=FALSE}
+
+for (m in group) {
+  # From FDS_ALL Build a DF with mean and median per single fly
+Average_fly <- FDS_ALL[FDS_ALL$group == m, ]
+Average_fly <- Average_fly %>% group_by(FlyId, stim) %>%
+  summarise(interval_mean=mean(interevent), interval_median=median(interevent),
+            interval_sd=sd(interevent), .groups = 'drop')
+
+# Build a DF with mean and median per single fly AND TRIAL
+Average_fly_per_trial <- FDS_ALL[FDS_ALL$group == m, ]
+Average_fly_per_trial <- Average_fly_per_trial %>% group_by(FlyId, stim, trial) %>% summarise(interval_mean=mean(interevent), interval_median=median(interevent),
+            interval_sd=sd(interevent), .groups = 'drop')
+
+## Average per fly
+# Means Plot
+a <- ggplot()+
+  geom_point(shape=21, size=5, data=Average_fly[which(Average_fly$stim==0),],
+             aes(x=FlyId, y=interval_mean), col='black',
+             fill='darkgrey')+
+  geom_point(shape=21, size=5, data=Average_fly[which(Average_fly$stim==1),],
+             aes(x=FlyId, y=interval_mean), col='black',
+             fill  ='lightgrey')+
+  geom_errorbar(data = Average_fly, aes(x=FlyId, ymin=interval_median - interval_sd,
+                                        ymax=interval_median + interval_sd))+
+  scale_x_continuous(n.breaks = as.numeric(max(Average_fly$FlyId)))+ 
+  labs(title =  m, subtitle = 'Mean')+
+  #ylim(0.5,1.5)+
+  xlab('Fly ID')+
+  ylab('ISI mean (s)')+
+    theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red', linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+
+# Median plot
+b <- ggplot()+
+  geom_point(shape=21, size=5, data=Average_fly[which(Average_fly$stim==0),],
+             aes(x=FlyId, y=interval_median), col='black',
+             fill='darkgrey')+
+  geom_point(shape=21, size=5, data=Average_fly[which(Average_fly$stim==1),],
+             aes(x=FlyId, y=interval_median), col='black',
+             fill  ='lightgrey')+
+  geom_errorbar(data = Average_fly, aes(x=FlyId, ymin=interval_median - interval_sd,
+                                        ymax=interval_median + interval_sd))+
+  scale_x_continuous(n.breaks = as.numeric(max(Average_fly$FlyId)))+ 
+  labs(title = m, subtitle = 'Median')+
+  #ylim(0.5,1.5)+
+  xlab('Fly ID')+
+  ylab('ISI median (s)')+
+    theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red', linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+print(a)
+print(b)
+## Average per fly per trial
+Average_fly_per_trial_nostim <-
+  Average_fly_per_trial[which(Average_fly_per_trial$stim==0),]
+Average_fly_per_trial_stim <-
+  Average_fly_per_trial[which(Average_fly_per_trial$stim==1),]
+
+for (k in (1:as.numeric(max(Average_fly_per_trial_nostim$FlyId)))) {
+  c<- ggplot()+
+    geom_point(shape=21, size=5, data=Average_fly_per_trial_nostim[which(Average_fly_per_trial_nostim$FlyId==k), ],
+               aes(x=trial, y=interval_mean), col='black', fill='darkgrey',
+               position=position_dodge())+
+  #[which(DF_single_fly_nostim$FlyId==1),]
+    geom_errorbar(data=Average_fly_per_trial_nostim[which(Average_fly_per_trial_nostim$FlyId==k), ], aes(x=trial, ymin=interval_mean-interval_sd, ymax=interval_mean+interval_sd), width = .5, position=position_dodge(.5),
+                  col = 'black', alpha  = .4)+
+    geom_point(shape=21, size=5, data=Average_fly_per_trial_stim[which(Average_fly_per_trial_stim$FlyId==k), ],
+             aes(x=trial, y=interval_mean), col='black',
+             fill  ='lightgrey', position=position_dodge())+
+  #[which(DF_single_fly_stim$FlyId==1),]
+    geom_errorbar(data=Average_fly_per_trial_stim[which(Average_fly_per_trial_stim$FlyId==k), ], aes(x=trial, ymin=interval_mean-interval_sd, ymax=interval_mean+interval_sd), width = .5, position=position_dodge(.5), col = 'black', alpha  = .8, linetype = 'dotted')+
+    scale_x_continuous(n.breaks = 6)+   # (n.breaks = n°. of trials)
+    labs(title = m, subtitle = k)+
+    #ylim(0.5,1.5)+
+    xlab('Trials')+
+    ylab('ISI mean (s)')+
+        theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red', linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+  print(c)
+ }
+}
+
+```
+
+```{r Boxplot, echo=FALSE, fig.height=10}
+for (m in group) {
+d <-  ggplot(data=FDS_ALL[FDS_ALL$group == m &  FDS_ALL$stim == 0, ], aes(group=trial, x=trial, y=(interevent),
+                                    fill=trial))+
+  stat_boxplot(geom = "errorbar") +
+  geom_boxplot(outlier.color = NA, outlier.size = 0, outlier.shape = NA)+
+  geom_jitter(color="black", size=0.5, alpha=0.5) +
+  facet_wrap(~FlyId, scales="free")+
+  scale_x_continuous(n.breaks = 6)+
+  scale_fill_gradient(low = "lightgrey", high = "darkgrey")+
+  xlab('Trials')+
+  ylab('ISI (s)')+
+  labs(title = m, subtitle = 'MOP')+
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red',
+                                          linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+
+e <-  ggplot(data=FDS_ALL[FDS_ALL$group == m &  FDS_ALL$stim == 1, ], aes(group=trial, x=trial, y=(interevent),
+                                    fill=trial))+
+  stat_boxplot(geom = "errorbar") +
+  geom_boxplot(outlier.color = NA, outlier.size = 0, outlier.shape = NA)+
+  geom_jitter(color="black", size=0.5, alpha=0.5) +
+  facet_wrap(~FlyId, scales="free")+
+  scale_x_continuous(n.breaks = 6)+
+  scale_fill_gradient(low = "lightgrey", high = "darkgrey")+
+  xlab('Trials')+
+  ylab('ISI (s)')+
+  labs(title = m, subtitle = 'RP')+
+  theme(panel.background = element_rect(fill = 'white', colour = 'white'),
+        panel.grid.major.y = element_line(colour = 'red',
+                                          linetype = 'dotted'),
+        panel.grid.major.x = element_line(colour = 'white'),
+        panel.grid.minor = element_line(colour = 'white'))
+print(d)
+print(e)
+}
+
+```
+
+Raster plots with distribution of ISI along trials.
+
+```{r Gradi, echo=FALSE, message=FALSE, warning=FALSE}
+FDS_ALL_withtmsp <- FDS_ALL %>%
+  group_by(group, FlyId, trial) %>%
+  group_by(FlyId, .add = TRUE) %>%
+  mutate(
+    trial_multiplier = (trial - 1) * 60,
+    nrows = n(),
+    row_number_scaled = seq(0, 1, length.out = nrows),
+    TimeStamp = trial_multiplier + (row_number_scaled * 60)
+  )
+
+ggplot(FDS_ALL_withtmsp, aes(x = TimeStamp, y = interevent, color = group)) +
+  geom_point(size = 0.1) +  # Adjust size as needed
+  scale_color_manual(values = group_colors) +
+  labs(x = "TimeStamp", y = "Interevent") +
+  facet_wrap(~ group, scales = "free") +
+  theme_minimal()+
+  coord_cartesian(ylim = c(0, 5))
+
+ggplot(FDS_ALL_withtmsp, aes(x = TimeStamp, y = interevent)) +
+  stat_density_2d(aes(fill = after_stat(density)), geom = "raster",
+                  contour = FALSE) +
+  scale_fill_gradientn(colors = 'plasma'(10)) +
+  labs(x = "TimeStamp", y = "Interevent") +
+  facet_wrap(~ group) +
+  ylim(0, 2)+
+  theme_minimal()
+```
+
+Raster plots with distribution of Peaks along trials.
+
+```{r Peaks number density over trials, echo=FALSE, message=FALSE, warning=FALSE}
+Peak_DF2 <- Peak_DF
+Peak_DF2$sec <- round(Peak_DF2$sec, 0)
+count_df <- data.frame(group = Peak_DF2$group, #[Peak_DF2$group %in% 'ir3535'],
+                       sec = Peak_DF2$sec, #[Peak_DF2$group %in% 'ir3535'],
+                       peak = ave(Peak_DF2$peak, #[Peak_DF2$group %in% 'ir3535'],
+                                     Peak_DF2$group,
+                                     Peak_DF2$sec, #[Peak_DF2$group %in% 'ir3535'],
+                                     FUN = length))
+
+# Remove duplicate rows based on 'sec' and 'group'
+count_df <- unique(count_df)
+# Reorder the dataframe by 'group' and then by 'sec'
+count_df <- count_df[order(count_df$group, count_df$sec), ]
+
+ggplot(count_df, aes(x = sec, y = peak, color = group)) +
+  geom_point(size = 1) +  # Adjust size as needed
+  scale_color_manual(values = group_colors) +
+  labs(x = "Time (sec)", y = "Peaks") +
+  facet_wrap(~ group, scales = "free") +
+  theme_minimal()
+  #coord_cartesian(ylim = c(0, 5))  
+    
+ggplot(count_df, aes(sec, peak))+
+         stat_density_2d(aes(fill = after_stat(density)), geom = "raster",
+                         contour = FALSE) +
+         scale_fill_gradientn(colors = 'plasma'(10)) +
+         labs(x = "Time (sec)", y = "Peaks") +
+         facet_wrap(~ group) +
+         ylim(0, 15) +
+         theme_minimal()
+```
+
+#### Statistics
+GLM fitting and permutations.
+
+```{r Fitting ISI, echo=FALSE, message=FALSE, warning=FALSE}
+## MODELS & FITTING
+# Linear model (Interevent time across trials)
+lm_interevent = lm(interevent~trial + FlyId, data = 
+                     FDS_ALL)
+summary(lm_interevent)
+
+plot(FDS_ALL[FDS_ALL$group == "controls", ]$trial,FDS_ALL[FDS_ALL$group == "controls", ]$interevent, pch = 16, col = "darkgrey", xlab = "Trial", ylab = "ISI", title ("Controls ISI over time"))
+abline(lm_interevent)
+##################################################################
+## GLM
+glm_isi <- glm(peak ~ sec, data = count_df[count_df$group %in% 'controls', ],
+               family = gaussian(link = log))
+summary(glm_isi)
+# Generate predicted values from the model
+predicted_values <- predict(glm_isi, type = "response")
+# Calculate TSS
+TSS <- sum((count_df$peak[count_df$group %in% 'controls'] -
+              mean(count_df$peak[count_df$group %in% 'controls']))^2)
+# Calculate RSS
+RSS <- sum((count_df$peak[count_df$group %in% 'controls'] - predicted_values)^2)
+# Calculate R-squared
+R_squared <- 1 - (RSS / TSS)
+# Print R-squared
+print(R_squared)
+# Plot the observed data points and the fitted values
+plot(count_df$sec[count_df$group %in% 'controls'], 
+     count_df$peak[count_df$group %in% 'controls'], pch = 16, col = "darkgrey", xlab = "Time (sec)", ylab = "Peaks", main = "GLM (Exp)")
+lines(count_df$sec[count_df$group %in% 'controls'], predicted_values, col = "red", lwd = 2)
+legend("bottomright", legend = c("Observed", "Fitted"), col = c("darkgrey", "red"), pch = c(16, NA), lwd = c(NA, 2))
+##################################################################
+# MASS package needed here
+# Define the models to test
+models <- c("glm", "lm")  # Exclude glmStepAIC as it's specific to caret
+# Initialize a list to store model results
+results <- list()
+# Fit models using lapply()
+for (model in models) {
+  if (model == "glm") {
+    # Fit GLM model
+    result <- glm(peak ~ sec, data = Peak_DF[Peak_DF$group == "controls", ], family = gaussian)
+  } else if (model == "lm") {
+    # Fit linear regression model
+    result <- lm(peak ~ sec, data = count_df)
+  }
+  # Store model result in the results list
+  results[[model]] <- result
+}
+# Print model summaries
+for (model in models) {
+  cat("Summary for", model, "model:\n")
+  print(summary(results[[model]]))
+  cat("\n")
+}
+##########################################
+tuning <- c('controls', 'ir3535', 'ir353505')
+# fit polynomial regression models up to degree 5 
+linear_model1 <- lm(peak~sec, data=count_df3[count_df3$group
+                                                  %in% tuning, ]) 
+quadratic_model1 <- lm(peak~poly(sec,2,raw=TRUE), data=count_df3[count_df3$group
+                                                          %in% tuning, ]) 
+quadratic_model2 <- lm(peak~poly(sec,3,raw=TRUE), data=count_df3[count_df3$group
+                                                          %in% tuning, ]) 
+quadratic_model3 <- lm(peak~poly(sec,4,raw=TRUE), data=count_df3[count_df3$group
+                                                          %in% tuning, ]) 
+quadratic_model4 <- lm(peak~poly(sec,5,raw=TRUE), data=count_df3[count_df3$group
+                                                          %in% tuning, ]) 
+parabolic_model1 <- lm(count_df3$peak[count_df3$group %in% tuning]
+                       ~I(count_df3$sec[count_df3$group %in% tuning]^2) +
+                         count_df3$sec[count_df3$group
+                                      %in% tuning]) 
+# calculated adjusted R-squared of each model 
+summary(linear_model1)$adj.r.squared 
+summary(quadratic_model1)$adj.r.squared 
+summary(quadratic_model2)$adj.r.squared 
+summary(quadratic_model3)$adj.r.squared 
+summary(quadratic_model4)$adj.r.squared
+summary(parabolic_model1)$adj.r.squared
+# Set the chosen model
+best_model <- quadratic_model2
+# create a basic scatter plot  
+plot(count_df3$sec[count_df3$group %in% tuning],
+     count_df3$peak[count_df3$group %in% tuning], xlab = "Time", ylab =  "Peaks") 
+# define x-axis values 
+x_axis <- seq(1, 360, length=360) 
+# plot best model 
+lines(x_axis, predict(best_model, data.frame(sec=x_axis)), col='red')
+# Extract fitted values for each group
+#models <- lm(peak~poly(sec,2)*group, data = count_df3)
+#fitted_values <- lapply(models, function(model) {
+#  predict(model)
+#})
+# ANOVA
+#ANOVA_results <- anova(models)
+#print(ANOVA_results)
+# Fit polynomial regression model
+lm_model <- lm(peak ~ poly(sec, 2) * group, data = count_df3)
+# Test for significant differences in model fit
+ANOVA_results <- anova(lm_model)
+# Check if ANOVA test is significant
+if (ANOVA_results$"Pr(>F)"[1] < 0.05) {
+  print("ANOVA test is significant\n")
+  residuals <- residuals(lm_model)
+  # Perform pairwise comparisons using Dunn's test with Bonferroni correction
+  pairwise_test <- dunn.test(residuals, count_df3$group, method = "bonferroni")
+  print(pairwise_test)
+} else {
+  print("ANOVA test is not significant\n")
+}
+# "perm" library required
+# Define the number of permutations
+num_permutations <- 10000
+# Fit the linear regression model
+lm_model <- lm(peak ~ poly(sec, 2) * group, data = count_df3)
+kruskal <- kruskal.test(peak ~ group, data = count_df3)
+# Compute the observed test statistic
+observed_statistic <- kruskal$`statistic`[1] #anova(lm_model)$`F value`[1]
+# Permute group labels and compute test statistic for each permutation
+permuted_statistics <- numeric(num_permutations)
+for (i in 1:num_permutations) {
+  # Permute group labels
+  permuted_groups <- sample(count_df3$group)
+  # Refit the model with permuted groups
+  # permuted_model <- lm(peak ~ poly(sec, 2) * permuted_groups, data = count_df3)
+  # Compute test statistic for permuted model
+  permuted_df <- count_df3
+  permuted_df$group <- permuted_groups
+  permuted_statistics[i] <-  kruskal.test(peak ~ group, data = permuted_df)#anova(permuted_model)$`F value`[1]
+}
+# Calculate p-value
+p_value <- mean(permuted_statistics >= observed_statistic)
+# Print p-value
+print("Probability of casually obtaining similar distributions")
+if (p_value == 0) {
+  print("p < 0.0001")
+} else  {
+  print(p_value)
+}
+# Extract intercept (control group)
+#control_intercept <- coef(lm_model)[1]
+# Function to compare intercepts between control and other #groups
+#compare_intercepts <- function(group_intercept, #control_intercept) {
+# Perform statistical test (e.g., t-test)
+#  p_value <- t.test(group_intercept, control_intercept)$p.value
+# Return p-value
+#  return(p_value)
+#}
+# Compare intercepts for each group
+#for (group_name in unique(count_df3$group)) {
+#  if (group_name != "controls") {
+#   group_intercept <- coef(lm_model)[grep(paste0("^group", #group_name, ":"), names(coef(lm_model)))]
+#    p_value <- compare_intercepts(group_intercept, #control_intercept)
+#    cat("Comparison between control and group", group_name, ": #p-value =", p_value, "\n")
+#  }
+#}
+#
+#count_df3 <- data.frame()
+#r <- 1
+#  for (j in group) {
+#    for (h in r) {
+#    len <- length(count_df2$sec[count_df2$group %in% j])
+#    count_df_j <- count_df2[count_df2$group %in% j, ]
+#    count_df_j$sec <- seq(1, len, 1)
+#    count_df3 <- rbind(count_df3, count_df_j) 
+#  } 
+#}
+# Define a function to rearrange and fill missing values
+#rearrange_and_fill <- function(count_df) {
+  # Define a function to interpolate missing values
+#  interpolate_missing <- function(x, y) {
+#    approxfun(x, y, method = "linear", rule = 2)
+#  }
+#  result <- data.frame(
+#    sec = rep(1:360, length(unique(count_df$group))), # Adjusted range to 0:359
+#    peak = 0,
+#    group = factor(rep(unique(count_df$group), each = 360)) # Each group has 360 seconds * 60 values
+#  )
+  # Loop through each group
+#  for (grp in unique(count_df$group)) {
+    # Subset data for the current group
+#    group_data <- subset(count_df, group == grp)
+    # Define the indices for the current group in the result data frame
+#    indices <- which(result$group == grp)[1]
+#    peaks <- group_data$peak
+    # Interpolate missing values and fill the result data frame
+#    result$peak[indices:(indices + length(peaks)-1)] <- peaks
+#  }
+#  return(result)
+#}
+# Apply the function to the sample data
+#result_df <- rearrange_and_fill(count_df)
+# Print the result
+#print(result_df)
+```
+
+## Generating data sets from raw data
+
+***NOTE: the present section is not required per se, as the relevant data sets for the further analysis are provided for download. The code section below can be used when starting the analysis from the files generated through the MATLAB script "Peaks_and_velocities_odours" (also available for download).***
+
+The following code is split into two parts:
+
+1.  analyzes head saccades tracked through '[*FlyAlyzer*](https://github.com/michaelrauscher/flyalyzer "Rauscher and Fox, 2021")' ([Rauscher and Fox, 2021](https://royalsocietypublishing.org/doi/full/10.1098/rspb.2020.2374)) and then tagged through a Matlab script. The code takes in input the '.txt' or '.csv' files generate from a Matlab script ('findpeaks' function, script also available for downloading); then it divides data reflecting the phases of the experimental paradigm. Note that, due to how the code was written, you should conduct the analysis only on ONE variable (peaks, slow phase velocity, or others) at a time, although the script let you load all the variables eventually, and all the relevant files must be placed togheter within a common folder;
+
+2.  takes all the generated 'peaks.txt' and processes them to write a new data frame for the remaining analysis.
+
+```{r Raw data processing, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+# Extracts saccades with respect to the corresponding visual # stimulus 
+# from the .txt files generated by the MATLAB script
+# "Peaks_and_velocities_odours" 
+#
+# By A.Megighian, Oct. 2022 Last revised by G. M. Menti
+# May 2023
+#
+# The script analyzes each individual separately.
+# 
+# The script utilizes .txt files generated by the script Matlab
+# "Peaks_and_velocities_odours.mat"
+# and the stimulus.txt file with trial information (visual + odour # coupling). 
+#
+# The following .txt files are needed (generated from the same Matlab script):
+# 1. Theta: .txt with the head angle over time ".....analysedthetaprc.txt"
+# 2. Spv: .txt with the slow phase velocity of saccades "......analysedspvprc.txt"
+# 3. Fpv: .txt with the fast phase velocity of saccades ".....analysedfpvorc.txt"
+# 4. Peaks: .txt with tagged saccades (peaks) over time "....analysedpksprc.txt"
+#
+# Generates some plots as well as dataframes for subsequent analysis
+#
+#
+# Libraries
+#
+rm(list=ls()) # empty the memory
+#
+# Load stimulus.txt file (stimeug)
+dlg_message(c("load the 'stimulus.txt' file", "Continue?"), "okcancel")$res;
+file <- file.choose(); #stimeug.txt
+stimeug<-read.csv(file); #loads stimeug
+#
+#load file (THETA ANGLE)
+dlg_message(c("load the head angle txt file", "Continue?"), "okcancel")$res;
+file <- file.choose(); # choose file
+file_name_theta <- basename(file); # saving output format
+file_dir <- dirname(file); # output directory
+setwd(file_dir); # set working directory 
+df1<-read.csv(file); # Loads Theta and generates dataframe1
+#
+#load file (PEAKS)
+dlg_message(c("load the peaks txt file", "Continue?"), "okcancel")$res;
+file <- file.choose();
+file_name_peaks <- basename(file);
+file_dir <- dirname(file);
+setwd(file_dir);
+df2<-read.csv(file); #Loads Peaks and generates dataframe2
+
+
+#load file (SPV)
+dlg_message(c("load the spv txt file", "Continue?"), "okcancel")$res;
+file <- file.choose();
+file_name_spv <- basename(file);
+file_dir <- dirname(file);
+setwd(file_dir);
+spv<-read.csv(file);
+
+#load file (FPV)
+dlg_message(c("load the fpv txt file", "Continue?"), "okcancel")$res;
+file <- file.choose();
+file_name_fpv <- basename(file);
+file_dir <- dirname(file);
+setwd(file_dir);
+fpv<-read.csv(file);
+# assign to dataframe df1 the head track values (theta)
+#df1<-`20_5_22_1prcanalysedthetaprc`;
+# assign to dataframe df1 the peaks identified by MatLab
+#df2<-`20_5_22_1prcanalysedpksprc`;
+# assign to dataframe df1 the slow phase velocity values
+#spv<-`20_5_22_1prcanalysedspvelprc`;
+# assign to dataframe df1 the fast phase velocity values
+#fpv<-`20_5_22_1prcanalysedfpvelprc`;
+# Analysis START
+# Define correct Stimuli names
+
+buridan<-filter(stimeug,stim==1);
+pause<-filter(stimeug,stim==2);
+okn<-filter(stimeug, stim==3);
+okn_stim<-filter(stimeug, stim==4);
+
+# Partition files along the different trial pahses
+# Since the Trial number is 6, there are 6 outputs
+# 1) THETA (head angle)
+# OKN Phases without odour
+otticocinetico<-data.frame(inizio=c(10,110,210,310,410,510), fine=c(39,139,239,339,439,539));# Start and end of the OKN visual stim
+for (i in 1:6) {
+ assign(paste0("okscosse", i), filter(df1, sec>=otticocinetico[i,1] & sec<=otticocinetico[i,2]))
+};
+# OKN Phases + odour
+otticocin_stimolo<-data.frame(inizio=c(40,140,240,340,440,540), fine=c(69,169,269,369,469,569));
+for (i in 1:6) {
+ assign(paste0("okscosse_stim", i), filter(df1, sec>=otticocin_stimolo[i,1] & sec<=otticocin_stimolo[i,2]))
+};
+# Pauses
+pause<-data.frame(inizio=c(80,180,280,380,480,580), fine=c(99,199,299,399,499,599));
+for (i in 1:6) {
+  assign(paste0("pause", i), filter(df1, sec>=pause[i,1] & sec<=pause[i,2]))
+};
+#BURIDAN
+buridan<-data.frame(inizio=c(1,70,100,170,200,270,300,370,400,470,500,570), fine=c(9,79,109,179,209,279,309,379,409,479,509,579));
+for (i in 1:6) {
+  assign(paste0("buridan", i), filter(df1, sec>=buridan[i,1] & sec<=buridan[i,2]))
+};
+# Extract PEAKS position along the trials
+# OKN
+otticocinetico<-data.frame(inizio=c(10,110,210,310,410,510), fine=c(39,139,239,339,439,539));
+for (i in 1:6) {
+  assign(paste0("okpicchi", i), filter(df2, sec>=otticocinetico[i,1] & sec<=otticocinetico[i,2]))
+};
+# OKN + odour
+otticocin_stimolo<-data.frame(inizio=c(40,140,240,340,440,540), fine=c(69,169,269,369,469,569));
+for (i in 1:6) {
+  assign(paste0("okpicchi_stim", i), filter(df2, sec>=otticocin_stimolo[i,1] & sec<=otticocin_stimolo[i,2]))
+};
+# PAUSE
+pause<-data.frame(inizio=c(80,180,280,380,480,580), fine=c(99,199,299,399,499,599));
+for (i in 1:6) {
+  assign(paste0("pausepicchi", i), filter(df2, sec>=pause[i,1] & sec<=pause[i,2]))
+};
+# BURIDAN
+buridan<-data.frame(inizio=c(1,70,100,170,200,270,300,370,400,470,500,570), fine=c(9,79,109,179,209,279,309,379,409,479,509,579));
+for (i in 1:6) {
+  assign(paste0("buridanpicchi", i), filter(df2, sec>=buridan[i,1] & sec<=buridan[i,2]))
+};
+# Extract SLOW PHASE VELOCITY across trials
+# OKN
+spv_okn<-data.frame(inizio=c(10,110,210,310,410,510), fine=c(39,139,239,339,439,539));
+for (i in 1:6) {
+  assign(paste0("spv_okn", i), filter(spv, sec>=otticocinetico[i,1] & sec<=otticocinetico[i,2]))
+};
+# OKN + ODOUR
+spv_oknstim<-data.frame(inizio=c(40,140,240,340,440,540), fine=c(69,169,269,369,469,569));
+for (i in 1:6) {
+  assign(paste0("spv_oknstim", i), filter(spv, sec>=otticocin_stimolo[i,1] & sec<=otticocin_stimolo[i,2]))
+};
+# PAUSE
+spv_pause<-data.frame(inizio=c(80,180,280,380,480,580), fine=c(99,199,299,399,499,599));
+for (i in 1:6) {
+  assign(paste0("spv_pausa", i), filter(spv, sec>=pause[i,1] & sec<=pause[i,2]))
+};
+# BURIDAN
+spv_bur<-data.frame(inizio=c(1,70,100,170,200,270,300,370,400,470,500,570), fine=c(9,79,109,179,209,279,309,379,409,479,509,579));
+for (i in 1:6) {
+  assign(paste0("spv_bur", i), filter(spv, sec>=buridan[i,1] & sec<=buridan[i,2]))
+};
+# Extract FAST PHASE VELOCITY across trials
+# OKN
+fpv_okn<-data.frame(inizio=c(10,110,210,310,410,510), fine=c(39,139,239,339,439,539));
+for (i in 1:6) {
+  assign(paste0("fpv_okn", i), filter(fpv, sec>=otticocinetico[i,1] & sec<=otticocinetico[i,2]))
+};
+# OKN + ODOUR
+fpv_oknstim<-data.frame(inizio=c(40,140,240,340,440,540), fine=c(69,169,269,369,469,569));
+for (i in 1:6) {
+  assign(paste0("fpv_oknstim", i), filter(fpv, sec>=otticocin_stimolo[i,1] & sec<=otticocin_stimolo[i,2]))
+};
+# PAUSE
+fpv_pause<-data.frame(inizio=c(80,180,280,380,480,580), fine=c(99,199,299,399,499,599));
+for (i in 1:6) {
+  assign(paste0("fpv_pausa", i), filter(fpv, sec>=pause[i,1] & sec<=pause[i,2]))
+};
+# BURIDAN
+fpv_bur<-data.frame(inizio=c(1,70,100,170,200,270,300,370,400,470,500,570), fine=c(9,79,109,179,209,279,309,379,409,479,509,579));
+for (i in 1:6) {
+  assign(paste0("fpv_bur", i), filter(fpv, sec>=buridan[i,1] & sec<=buridan[i,2]))
+};
+### PLOTS ###
+#############
+# THETA  #
+##########
+# PLOTS BURIDAN
+ggplot() +
+  geom_line(data=buridan1, aes(x=1:nrow(buridan1), y=theta, col="1")) + 
+  geom_line(data=buridan2, aes(x=1:nrow(buridan2), y=theta, col="2"))+
+  geom_line(data=buridan3, aes(x=1:nrow(buridan3), y=theta, col="3"))+
+  geom_line(data=buridan4, aes(x=1:nrow(buridan4), y=theta,col="4"))+
+  geom_line(data=buridan5, aes(x=1:nrow(buridan5), y=theta,col="5"))+
+  geom_line(data=buridan6, aes(x=1:nrow(buridan6), y=theta,col="6"))
+# PLOTS OKN
+ggplot() +
+  geom_line(data=okscosse1, aes(x=1:nrow(okscosse1), y=theta, col="1")) + 
+  geom_line(data=okscosse2, aes(x=1:nrow(okscosse2), y=theta, col="2"))+
+  geom_line(data=okscosse3, aes(x=1:nrow(okscosse3), y=theta, col="3"))+
+  geom_line(data=okscosse4, aes(x=1:nrow(okscosse4), y=theta,col="4"))+
+  geom_line(data=okscosse5, aes(x=1:nrow(okscosse5), y=theta,col="5"))+
+  geom_line(data=okscosse6, aes(x=1:nrow(okscosse6), y=theta,col="6"))
+# PLOTS OKN + STIM
+ggplot() +
+  geom_line(data=okscosse_stim1, aes(x=1:nrow(okscosse_stim1), y=theta, col="1")) + 
+  geom_line(data=okscosse_stim2, aes(x=1:nrow(okscosse_stim2), y=theta, col="2"))+
+  geom_line(data=okscosse_stim3, aes(x=1:nrow(okscosse_stim3), y=theta, col="3"))+
+  geom_line(data=okscosse_stim4, aes(x=1:nrow(okscosse_stim4), y=theta,col="4"))+
+  geom_line(data=okscosse_stim5, aes(x=1:nrow(okscosse_stim5), y=theta,col="5"))+
+  geom_line(data=okscosse_stim6, aes(x=1:nrow(okscosse_stim6), y=theta,col="6"))
+# PLOTS PAUSE
+ggplot() +
+  geom_line(data=pause1, aes(x=1:nrow(pause1), y=theta, col="1")) + 
+  geom_line(data=pause2, aes(x=1:nrow(pause2), y=theta, col="2"))+
+  geom_line(data=pause3, aes(x=1:nrow(pause3), y=theta, col="3"))+
+  geom_line(data=pause4, aes(x=1:nrow(pause4), y=theta,col="4"))+
+  geom_line(data=pause5, aes(x=1:nrow(pause5), y=theta,col="5"))+
+  geom_line(data=pause6, aes(x=1:nrow(pause6), y=theta,col="6"))
+#################
+# PLOT of PEAKS #
+#################
+# BURIDAN
+ggplot() +
+  geom_point(data=buridanpicchi1, aes(x=1:nrow(buridanpicchi1), y=peak, col="1")) + 
+  geom_point(data=buridanpicchi2, aes(x=1:nrow(buridanpicchi2), y=peak, col="2"))+
+  geom_point(data=buridanpicchi3, aes(x=1:nrow(buridanpicchi3), y=peak, col="3"))+
+  geom_point(data=buridanpicchi4, aes(x=1:nrow(buridanpicchi4), y=peak,col="4"))+
+  geom_point(data=buridanpicchi5, aes(x=1:nrow(buridanpicchi5), y=peak,col="5"))+
+  geom_point(data=buridanpicchi6, aes(x=1:nrow(buridanpicchi6), y=peak,col="6"))
+# OKN
+ggplot() +
+  geom_point(data=okpicchi1, aes(x=1:nrow(okpicchi1), y=peak, col="1")) + 
+  geom_point(data=okpicchi2, aes(x=1:nrow(okpicchi2), y=peak, col="2"))+
+  geom_point(data=okpicchi3, aes(x=1:nrow(okpicchi3), y=peak, col="3"))+
+  geom_point(data=okpicchi4, aes(x=1:nrow(okpicchi4), y=peak,col="4"))+
+  geom_point(data=okpicchi5, aes(x=1:nrow(okpicchi5), y=peak,col="5"))+
+  geom_point(data=okpicchi6, aes(x=1:nrow(okpicchi6), y=peak,col="6"))
+# OKN + STIM
+ggplot() +
+  geom_point(data=okpicchi_stim1, aes(x=1:nrow(okpicchi_stim1), y=peak, col="1")) + 
+  geom_point(data=okpicchi_stim2, aes(x=1:nrow(okpicchi_stim2), y=peak, col="2"))+
+  geom_point(data=okpicchi_stim3, aes(x=1:nrow(okpicchi_stim3), y=peak, col="3"))+
+  geom_point(data=okpicchi_stim4, aes(x=1:nrow(okpicchi_stim4), y=peak,col="4"))+
+  geom_point(data=okpicchi_stim5, aes(x=1:nrow(okpicchi_stim5), y=peak,col="5"))+
+  geom_point(data=okpicchi_stim6, aes(x=1:nrow(okpicchi_stim6), y=peak,col="6"))
+# PAUSE
+ggplot() +
+  geom_line(data=pausepicchi1, aes(x=1:nrow(pausepicchi1), y=peak, col="1")) + 
+  geom_line(data=pausepicchi2, aes(x=1:nrow(pausepicchi2), y=peak, col="2"))+
+  geom_line(data=pausepicchi3, aes(x=1:nrow(pausepicchi3), y=peak, col="3"))+
+  geom_line(data=pausepicchi4, aes(x=1:nrow(pausepicchi4), y=peak,col="4"))+
+  geom_line(data=pausepicchi5, aes(x=1:nrow(pausepicchi5), y=peak,col="5"))+
+  geom_line(data=pausepicchi6, aes(x=1:nrow(pausepicchi6), y=peak,col="6"))
+# Head angle + PEAKS
+ggplot() +
+  geom_line(data=df1, aes(x=sec, y=theta)) + 
+  geom_point(data=df2, aes(x=sec, y=peak,col="2"))+
+  geom_point(data=okpicchi1, aes(x=sec, y=peak, col="3")) + 
+  geom_point(data=okpicchi2, aes(x=sec, y=peak, col="3"))+
+  geom_point(data=okpicchi3, aes(x=sec, y=peak, col="3"))+
+  geom_point(data=okpicchi4, aes(x=sec, y=peak,col="3"))+
+  geom_point(data=okpicchi5, aes(x=sec, y=peak,col="3"))+
+  geom_point(data=okpicchi6, aes(x=sec, y=peak,col="3"))+
+  geom_point(data=okpicchi_stim1, aes(x=sec, y=peak, col="4")) + 
+  geom_point(data=okpicchi_stim2, aes(x=sec, y=peak, col="4"))+
+  geom_point(data=okpicchi_stim3, aes(x=sec, y=peak, col="4"))+
+  geom_point(data=okpicchi_stim4, aes(x=sec, y=peak,col="4"))+
+  geom_point(data=okpicchi_stim5, aes(x=sec, y=peak,col="4"))+
+  geom_point(data=okpicchi_stim6, aes(x=sec, y=peak,col="4"))
+# + xlim(410,470); zoom on plot
+
+# SPV Boxplots, + Scatter plot of data
+ggplot()+
+geom_boxplot(data=spv_okn1, aes(x="A",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_okn1, aes(x="A",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_oknstim1, aes(x="B",y=spvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_oknstim1, aes(x="B",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_okn2, aes(x="C",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_okn2, aes(x="C",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_oknstim2, aes(x="D",y=spvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_oknstim2, aes(x="D",y=spvel),shape=16, position=position_jitter(0.2))+  
+#
+geom_boxplot(data=spv_okn3, aes(x="E",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_okn3, aes(x="E",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_oknstim3, aes(x="F",y=spvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_oknstim3, aes(x="F",y=spvel),shape=16, position=position_jitter(0.2))+  
+#
+geom_boxplot(data=spv_okn4, aes(x="G",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_okn4, aes(x="G",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_oknstim4, aes(x="H",y=spvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_oknstim4, aes(x="H",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_okn5, aes(x="I",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_okn5, aes(x="I",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_oknstim5, aes(x="L",y=spvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_oknstim5, aes(x="L",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_okn6, aes(x="M",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_okn6, aes(x="M",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spv_oknstim6, aes(x="N",y=spvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spv_oknstim6, aes(x="N",y=spvel),shape=16, position=position_jitter(0.2))  
+
+# Complete SPV Boxplots
+spvokn_merged<-rbind(spv_okn1,spv_okn2,spv_okn3,spv_okn4,spv_okn5,spv_okn6); # combine all SPV
+spvokn_mergedflt<-filter(spvokn_merged,spvel>=0 & spvel<=100);# filter SPV during OKN in 0:100
+spvoknstim_merged<-rbind(spv_oknstim1,spv_oknstim2,spv_oknstim3,spv_oknstim4,spv_oknstim5,spv_oknstim6);# combine ALL SPV
+spvoknstim_mergedflt<-filter(spvoknstim_merged,spvel>=0 & spvel<=100);# filter SPV during OKN + STIM in 0:100
+#
+# Generate plot
+ggplot()+
+  geom_boxplot(data=spvokn_mergedflt, aes(x="1",y=spvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=spvokn_mergedflt, aes(x="1",y=spvel),shape=16, position=position_jitter(0.2))+
+#
+geom_boxplot(data=spvoknstim_mergedflt, aes(x="2",y=spvel), col="4")+
+geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+geom_jitter(data=spvoknstim_mergedflt, aes(x="2",y=spvel),shape=16, position=position_jitter(0.2))  
+# PEAKS Boxplots + Scatter plot
+ggplot()+
+  geom_boxplot(data=okpicchi1, aes(x="A",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi1, aes(x="A",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi_stim1, aes(x="A_S",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi_stim1, aes(x="A_S",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi2, aes(x="B",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi2, aes(x="B",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi_stim2, aes(x="B_S",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi_stim2, aes(x="B_S",y=peak),shape=16,
+              position=position_jitter(0.2))+  
+#
+  geom_boxplot(data=okpicchi3, aes(x="C",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi3, aes(x="C",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi_stim3, aes(x="C_S",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi_stim3, aes(x="C_S",y=peak),shape=16,
+              position=position_jitter(0.2))+  
+#
+  geom_boxplot(data=okpicchi4, aes(x="D",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi4, aes(x="D",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi_stim4, aes(x="D_S",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi_stim4, aes(x="D_S",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi5, aes(x="E",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi5, aes(x="E",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi_stim5, aes(x="E_S",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi_stim5, aes(x="E_S",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi6, aes(x="F",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi6, aes(x="F",y=peak),shape=16,
+              position=position_jitter(0.2))+
+#
+  geom_boxplot(data=okpicchi_stim6, aes(x="F_S",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=okpicchi_stim6, aes(x="F_S",y=peak),shape=16,
+              position=position_jitter(0.2))  
+
+# Complete boxplot
+theta_merged<-rbind(okpicchi1,okpicchi2,okpicchi3,okpicchi4,okpicchi5,okpicchi6); # combine all Theta
+thetastim_merged<-rbind(okpicchi_stim1,okpicchi_stim2,okpicchi_stim3,okpicchi_stim4,okpicchi_stim5,okpicchi_stim6);# combine all Theta + STIM
+# Plot
+ggplot()+
+  geom_boxplot(data=theta_merged, aes(x="1",y=peak), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=theta_merged, aes(x="1",y=peak),shape=16,
+              position=position_jitter(0.2))+
+  #
+  geom_boxplot(data=thetastim_merged, aes(x="2",y=peak), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=thetastim_merged, aes(x="2",y=peak),shape=16,
+              position=position_jitter(0.2))  
+#
+fpvokn_merged<-rbind(fpv_okn1,fpv_okn2,fpv_okn3,fpv_okn4,fpv_okn5,fpv_okn6); # all FPV
+fpvoknstim_merged<-rbind(fpv_oknstim1,fpv_oknstim2,fpv_oknstim3,fpv_oknstim4,fpv_oknstim5,fpv_oknstim6);
+# all FPV + STIM
+ggplot()+
+  geom_boxplot(data=fpvokn_merged, aes(x="1",y=fpvel), col="3")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=fpvokn_merged, aes(x="1",y=fpvel),shape=16, position=position_jitter(0.2))+
+  geom_boxplot(data=fpvoknstim_merged, aes(x="2",y=fpvel), col="4")+
+  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+  geom_jitter(data=fpvoknstim_merged, aes(x="2",y=fpvel),shape=16, position=position_jitter(0.2))  
+##############
+# SAVE DATA
+# Save R Dataset
+library (tools);
+nomefile<-file_path_sans_ext(file_name_theta);
+filename<- paste(nomefile,".RData",sep="");
+setwd(file_dir);
+save.image(filename);
+setwd(file_dir);
+file1<-paste("spvokn_mergedflt", nomefile, ".csv",sep="");
+write.table(spvokn_mergedflt,file1);
+file2<-paste("spvoknstim_mergedflt", nomefile, ".csv",sep="");
+write.table(spvoknstim_mergedflt,file2);
+file3<-paste("theta_merged", nomefile, ".csv",sep="");
+write.table(theta_merged, file3);
+file4<-paste("thetastim_merged", nomefile, ".csv",sep="");
+write.table(thetastim_merged, file4);
+file5<-paste("df1", nomefile, ".csv", sep="");
+write.table(df1, file5);
+#saveRDS("fpvokn_mergedflt", nomefile, ".Rds",sep="");
+#saveRDS("fpvoknstim_mergedflt", nomefile, ".Rds",sep="");
+rm(list=ls());# empty the memory
+end
+
+#file_names <- dir(); #where you have your files
+#your_data_frame <- do.call(rbind,lapply(file_names,read.csv, sep=""));
+#end
+#ggplot()+
+#  geom_boxplot(data=okn, aes(x="1",y=spvel), col="3")+
+#  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+#  geom_jitter(data=okn, aes(x="1",y=spvel),shape=16,
+#  position=position_jitter(0.2))+
+#  geom_boxplot(data=okn_stim, aes(x="2",y=spvel), col="4")+
+#  geom_dotplot(binaxis="y", stackdir="center", dotsize=1)+
+#  geom_jitter(data=okn_stim, aes(x="2",y=spvel),shape=16, position=position_jitter(0.2))
+###############################################################
+"Building DF for ISI"
+
+group <- c("controls", "eugenol", "eugenol05", "lemongrass", "lemongrass05", "picaridin", "picaridin05", "ir3535", "ir353505")
+group_colors <- c("controls" = "forestgreen", "eugenol05" = "skyblue1",
+                  "eugenol" = "royalblue", "lemongrass05" = "lightgoldenrod1",
+                  "lemongrass" = "goldenrod1", "picaridin05" = "lightsalmon1",
+                  "picaridin" = "orangered1", "ir353505" = "mediumorchid1",
+                  "ir3535" = "darkviolet")
+
+# New dataframe for storing final data
+  dx_All <- data.frame("interevent"=NA, "FlyId"=NA, "trial"=NA,
+                       "group"= NA)
+  dx_All_stim <- data.frame("interevent"=NA, "FlyId"=NA, "trial"=NA,
+                       "group"= NA)
+# Vector containing all groups (prepared folders with ".txt"/".csv")  
+# Start the loop
+for (k in group) {
+  dir<-selectDirectory();
+  setwd(dir);
+  filenames <- list.files(pattern = '\\.txt', full.names = TRUE);
+  df <- purrr::map_df(filenames, read.csv,sep=",", header = TRUE, .id = 'generation');
+  head(df);
+  # Mineral Oil Phase (MOP)
+  okn <- data.frame(start=c(10,110,210,310,410,510),
+                    end=c(39,139,239,339,439,539));
+  for (i in 1:6) {
+    assign(paste0("trial", i), filter(df, sec >=okn[i,1] &
+                                           sec <=okn[i,2]))
+    };
+  # Odourant Phase (OP)
+  okn_stim<-data.frame(start=c(40,140,240,340,440,540),
+                                end=c(69,169,269,369,469,569));
+  for (i in 1:6) {
+    assign(paste0("trial_stim", i), filter(df, sec >=okn_stim[i,1] &
+                                                sec <=okn_stim[i,2]))
+    };
+  # Vectors needed for loops
+  VarNames <- c()
+  VarNames_stim <- c()
+  
+  # Loop through all trials
+  for(z in 1:6){
+    VarNames[z] <- paste0("trial", z)
+    VarNames_stim[z] <- paste0("trial_stim", z)
+    individuals<-max(as.numeric(eval(parse(text=(paste0(VarNames[z], 
+                                                      "$generation"))))))
+    individuals_stim<-max(as.numeric(eval(parse(text=(paste0(VarNames_stim[z], "$generation"))))))
+    this.hokns <- eval(as.name(VarNames[z]))
+    this.hokns_stim <- eval(as.name(VarNames_stim[z]))
+    
+    # Loop through FlyId (no stim)
+    for(i in 1:individuals) {
+      df <- this.hokns[which(this.hokns$generation == i),]
+      a <- df$sec
+      m=length(a)
+      if(m == 0 | m < 2) next
+     # Loop through single HOKNs
+      for (j in 1:(m-1)){
+        x1=a[j]
+        x2=a[j+1]
+        # Vector containing the results
+        dx <- c(interevent=(x2-x1), FlyId=i, trial=z, group=k)
+        # Add vector to dx_All (nuova row)
+        dx_All[nrow(dx_All) + 1,] <- dx
+      }
+    }
+    # Loop through FlyId (stim)
+    for (i in 1:individuals_stim) {
+      df_stim <- this.hokns_stim[which(this.hokns_stim$generation == i),]
+            b <- df_stim$sec
+            n=length(b)
+            if(n == 0 | n < 2) next
+            # Loop through single HOKNs
+            for (j in 1:(n-1)){
+        x1=b[j]
+        x2=b[j+1]
+        # Vector containing the results
+        dx_stim <- c(interevent=(x2-x1), FlyId=i, trial=z, group=k)
+        # Add vector to dx_All (nuova row)
+        dx_All_stim[nrow(dx_All_stim) + 1,] <- dx_stim
+      }
+      
+    }
+}
+ISI_all_nostim<-mutate(dx_All, stim=0);
+ISI_all_stim<-mutate(dx_All_stim, stim=1);
+ISI_all<-rbind(ISI_all_nostim[-1, ], ISI_all_stim[-1, ]);
+assign(paste(k, sep = ''), ISI_all)
+}
+FDS_ALL <- rbind(controls, eugenol, eugenol05, lemongrass, lemongrass05, picaridin, picaridin05, ir3535, ir353505)
+save(FDS_ALL, file = "IntervalsFull.Rdata")
+?save
+```
